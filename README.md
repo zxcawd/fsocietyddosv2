@@ -1,1 +1,1 @@
-FSOCIETY DDOS - V2 is the new modern ddos
+fsociety ddos v2 is the new modern ddos
